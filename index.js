@@ -7,9 +7,20 @@ const documentrouter = require('./routes/doumentroute');
 // console.log(process.env.GEMINI_API_KEY); // debug removed
 
 const app = express();
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://chatbaot-frotend.vercel.app",
+];
+
 app.use(
   cors({
-    origin: "https://chatbaot-frotend.vercel.app",
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
