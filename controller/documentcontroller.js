@@ -2,33 +2,48 @@ const pdfParse = require("pdf-parse");
 const DocumentSchema = require("../model/doument");
 const ai = require("../utils/gemini");
 
+// Upload Document
 const uploadDocument = async (req, res) => {
-    // Check if a file was uploaded
+  try {
     if (!req.file) {
-        return res.status(400).json({
-            success: false,
-            message: "No file uploaded"
-        });
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
     }
-    // Parse the PDF file using pdf-parse
+
     const data = await pdfParse(req.file.buffer);
 
-     const Dodument = await DocumentSchema.create({
-        fileName: req.file.originalname,
-        chunkIndex: 0, // Assuming this is the first chunk
-        text: data.text,
+    // Remove old document with same file name
+    await DocumentSchema.deleteMany({
+      fileName: req.file.originalname,
     });
 
-    console.log(data.text);
-
-    res.json({
-        success: true,
-        message: "PDF received"
+    const document = await DocumentSchema.create({
+      fileName: req.file.originalname,
+      chunkIndex: 0,
+      text: data.text,
     });
+
+    res.status(201).json({
+      success: true,
+      message: "Document uploaded successfully",
+      document,
+    });
+  } catch (error) {
+    console.error("UPLOAD ERROR:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
+
+// Chat with Document
 const chatWithDocument = async (req, res) => {
   try {
-    const { question } = req.body;
+    const { question, fileName } = req.body;
 
     if (!question) {
       return res.status(400).json({
@@ -37,39 +52,44 @@ const chatWithDocument = async (req, res) => {
       });
     }
 
-    const document = await DocumentSchema.findOne();
+    const document = await DocumentSchema.findOne({ fileName });
 
     if (!document) {
       return res.status(404).json({
         success: false,
-        message: "No document found",
+        message: "Document not found",
       });
     }
-         const prompt = `
-        Answer ONLY using the document below.
 
-        Document:
-        ${document.text}
+   const prompt = `
+Document:
 
-        Question:
-        ${question}
+${document.text}
 
-        If the answer is not found in the document, reply:
-        "The uploaded document does not contain this information."
-        `;
+Question:
+${question}
+
+Answer using only the document.
+`;
+
+
+    console.log("REQ BODY:", req.body);
+    console.log("FILE:", document.fileName);
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
     });
+    console.log("GEMINI RESPONSE:", response.text);
+    console.log(document.text.substring(0, 500));
 
     res.status(200).json({
       success: true,
       answer: response.text,
     });
-
   } catch (error) {
-    console.log(error);
+    console.error("CHAT ERROR:", error);
+
     res.status(500).json({
       success: false,
       message: error.message,
@@ -77,8 +97,7 @@ const chatWithDocument = async (req, res) => {
   }
 };
 
-
 module.exports = {
-    uploadDocument,
-    chatWithDocument
+  uploadDocument,
+  chatWithDocument,
 };
